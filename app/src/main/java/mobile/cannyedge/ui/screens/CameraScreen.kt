@@ -5,18 +5,30 @@ import mobile.cannyedge.ui.components.CameraSwitchButton
 import mobile.cannyedge.ui.viewmodels.CameraViewModel
 import android.Manifest
 import androidx.camera.view.LifecycleCameraController
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -26,50 +38,84 @@ import mobile.cannyedge.ui.components.ProcessingStepSlider
 @Composable
 fun CameraScreen(
     modifier: Modifier = Modifier,
-    viewModel: CameraViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    viewModel: CameraViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraController = remember { LifecycleCameraController(context) }
     val hasPermission = rememberPermissionState(Manifest.permission.CAMERA)
-    val showCamera = remember { mutableStateOf(false) }
+    val isCameraInitialized = remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        if (!hasPermission.status.isGranted) {
-            hasPermission.launchPermissionRequest()
+        if (hasPermission.status.isGranted) {
+            initializeCamera(cameraController, lifecycleOwner, viewModel, isCameraInitialized)
         } else {
-            showCamera.value = true
+            hasPermission.launchPermissionRequest()
         }
     }
 
     LaunchedEffect(hasPermission.status) {
-        if (hasPermission.status.isGranted) {
-            cameraController.bindToLifecycle(lifecycleOwner)
-            viewModel.setCameraController(cameraController)
+        if (hasPermission.status.isGranted && !isCameraInitialized.value) {
+            initializeCamera(cameraController, lifecycleOwner, viewModel, isCameraInitialized)
         }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (showCamera.value) {
+        if (isCameraInitialized.value) {
             CameraPreview(
                 controller = cameraController,
                 modifier = Modifier.fillMaxSize()
             )
 
-            CameraSwitchButton(
-                onSwitchCamera = { viewModel.switchCamera() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-            )
-
-            ProcessingStepSlider(
-                positions = 4,
+            // Position the switch button above the slider in the center
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp)
-            )
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Camera switch button with white background
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .background(Color.White, CircleShape)
+                        .size(48.dp)
+                ) {
+                    CameraSwitchButton(
+                        onSwitchCamera = { viewModel.switchCamera() },
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Slider
+                ProcessingStepSlider(
+                    positions = 4,
+                    modifier = Modifier
+                        .fillMaxWidth(0.8f)
+                )
+            }
+        } else {
+            // Show loading indicator while initializing camera
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
         }
     }
+}
+
+private fun initializeCamera(
+    cameraController: LifecycleCameraController,
+    lifecycleOwner: LifecycleOwner,
+    viewModel: CameraViewModel,
+    isCameraInitialized: MutableState<Boolean>
+) {
+    cameraController.bindToLifecycle(lifecycleOwner)
+    viewModel.setCameraController(cameraController)
+    isCameraInitialized.value = true
 }
 

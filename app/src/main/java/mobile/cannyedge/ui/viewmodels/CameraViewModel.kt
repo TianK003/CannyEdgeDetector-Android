@@ -10,6 +10,10 @@ class CameraViewModel : ViewModel() {
 
     fun setCameraController(controller: LifecycleCameraController) {
         cameraController = controller
+        // Set initial camera lens facing
+        cameraController?.cameraSelector = CameraSelector.Builder()
+            .requireLensFacing(lensFacing)
+            .build()
     }
 
     fun switchCamera() {
