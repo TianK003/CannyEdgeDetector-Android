@@ -4,7 +4,9 @@ import mobile.cannyedge.ui.components.CameraPreview
 import mobile.cannyedge.ui.components.CameraSwitchButton
 import mobile.cannyedge.ui.viewmodels.CameraViewModel
 import android.Manifest
+import android.content.Context
 import androidx.camera.view.LifecycleCameraController
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,13 +21,18 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -45,10 +52,19 @@ fun CameraScreen(
     val cameraController = remember { LifecycleCameraController(context) }
     val hasPermission = rememberPermissionState(Manifest.permission.CAMERA)
     val isCameraInitialized = remember { mutableStateOf(false) }
+    val sliderPosition by viewModel.sliderPosition.collectAsState()
+    val processedImage by viewModel.processedImage.collectAsState()
 
+    // Initialize camera and set up analysis
     LaunchedEffect(Unit) {
         if (hasPermission.status.isGranted) {
-            initializeCamera(cameraController, lifecycleOwner, viewModel, isCameraInitialized)
+            initializeCamera(
+                context = context,
+                cameraController = cameraController,
+                lifecycleOwner = lifecycleOwner,
+                viewModel = viewModel,
+                isCameraInitialized = isCameraInitialized
+            )
         } else {
             hasPermission.launchPermissionRequest()
         }
@@ -56,16 +72,38 @@ fun CameraScreen(
 
     LaunchedEffect(hasPermission.status) {
         if (hasPermission.status.isGranted && !isCameraInitialized.value) {
-            initializeCamera(cameraController, lifecycleOwner, viewModel, isCameraInitialized)
+            initializeCamera(
+                context = context,
+                cameraController = cameraController,
+                lifecycleOwner = lifecycleOwner,
+                viewModel = viewModel,
+                isCameraInitialized = isCameraInitialized
+            )
         }
+    }
+
+    // Update processing step when slider changes
+    LaunchedEffect(sliderPosition) {
+        viewModel.setProcessingStep(sliderPosition.toInt())
     }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (isCameraInitialized.value) {
-            CameraPreview(
-                controller = cameraController,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (sliderPosition == 0f) {
+                // Show original camera preview
+                CameraPreview(
+                    controller = cameraController,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (processedImage != null) {
+                // Show processed image
+                Image(
+                    bitmap = processedImage!!.asImageBitmap(),
+                    contentDescription = "Processed Image",
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
             // Position the switch button above the slider in the center
             Column(
@@ -92,6 +130,8 @@ fun CameraScreen(
                 // Slider
                 ProcessingStepSlider(
                     positions = 4,
+                    sliderPosition = sliderPosition,
+                    onPositionChanged = { viewModel.updateSliderPosition(it) },
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                 )
@@ -109,6 +149,7 @@ fun CameraScreen(
 }
 
 private fun initializeCamera(
+    context: Context,  // Added context parameter
     cameraController: LifecycleCameraController,
     lifecycleOwner: LifecycleOwner,
     viewModel: CameraViewModel,
@@ -117,5 +158,10 @@ private fun initializeCamera(
     cameraController.bindToLifecycle(lifecycleOwner)
     viewModel.setCameraController(cameraController)
     isCameraInitialized.value = true
-}
 
+    // Set up image analysis
+    cameraController.setImageAnalysisAnalyzer(
+        ContextCompat.getMainExecutor(context),  // Now using the context parameter
+        viewModel.createImageAnalyzer()
+    )
+}

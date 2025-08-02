@@ -16,10 +16,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ProcessingStepSlider(
     positions: Int,
+    sliderPosition: Float,
+    onPositionChanged: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var sliderPosition by remember { mutableStateOf(0f) }
-
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -28,10 +28,10 @@ fun ProcessingStepSlider(
     ) {
         Slider(
             value = sliderPosition,
-            onValueChange = { sliderPosition = it },
+            onValueChange = onPositionChanged,
             valueRange = 0f..(positions - 1).toFloat(),
             steps = positions - 2,
-            modifier = Modifier.fillMaxWidth(0.8f)
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
