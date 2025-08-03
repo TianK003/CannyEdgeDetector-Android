@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CannyEdge"
 include(":app")
+include(":opencv")
