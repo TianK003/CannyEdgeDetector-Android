@@ -24,6 +24,7 @@ import org.opencv.core.Mat
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import java.io.ByteArrayOutputStream
+import androidx.core.graphics.createBitmap
 
 class CameraViewModel : ViewModel() {
     private var cameraController: LifecycleCameraController? = null
@@ -99,25 +100,21 @@ class CameraViewModel : ViewModel() {
 
     private suspend fun processImageWithOpenCV(bitmap: Bitmap) =
         withContext(Dispatchers.Default) {
-            // Convert Bitmap to OpenCV Mat
             val srcMat = Mat().apply {
                 Utils.bitmapToMat(bitmap, this)
             }
 
             try {
                 // Step 1: Convert to grayscale
-                Imgproc.cvtColor(srcMat, grayMat, Imgproc.COLOR_RGB2GRAY)
+                Imgproc.cvtColor(srcMat, grayMat, Imgproc.COLOR_RGBA2GRAY)
 
-                // Step 2: Apply Gaussian blur
-                Imgproc.GaussianBlur(
-                    grayMat,
-                    blurredMat,
-                    Size(5.0, 5.0),
-                    1.4,
-                    1.4
-                )
+                // Display grayscale for all steps
+                setProcessedImage(grayMat)
 
-                // Process based on selected step
+                // Continue processing but don't use results yet
+                Imgproc.GaussianBlur(grayMat, blurredMat, Size(5.0, 5.0), 1.4, 1.4)
+
+                // These will all show grayscale now
                 when (processingStep) {
                     1 -> showGradientMagnitude()
                     2 -> showNonMaxSuppression()
@@ -129,186 +126,27 @@ class CameraViewModel : ViewModel() {
             }
         }
 
-    private fun showGradientMagnitude() {
-        // Calculate derivatives
-        Imgproc.Sobel(blurredMat, gradX, CvType.CV_16S, 1, 0, 3, 1.0, 0.0)
-        Imgproc.Sobel(blurredMat, gradY, CvType.CV_16S, 0, 1, 3, 1.0, 0.0)
+    private suspend fun showGradientMagnitude() = setProcessedImage(grayMat)
+    private suspend fun showNonMaxSuppression() = setProcessedImage(grayMat)
+    private suspend fun showDoubleThreshold() = setProcessedImage(grayMat)
+    private suspend fun showFinalEdges() = setProcessedImage(grayMat)
 
-        // Calculate gradient magnitude
-        Core.convertScaleAbs(gradX, gradX)
-        Core.convertScaleAbs(gradY, gradY)
-        Core.addWeighted(gradX, 0.5, gradY, 0.5, 0.0, magnitudeMat)
-
-        // Convert to 4-channel BGRA for display
+    private suspend fun setProcessedImage(mat: Mat) {
+        // Create a new Mat to avoid modifying the original
         val displayMat = Mat()
-        Imgproc.cvtColor(magnitudeMat, displayMat, Imgproc.COLOR_GRAY2BGRA)
+        try {
+            // Convert grayscale to RGBA for display
+            Imgproc.cvtColor(mat, displayMat, Imgproc.COLOR_GRAY2RGBA)
 
-        // Convert to bitmap and update state
-        val outputBitmap = Bitmap.createBitmap(
-            displayMat.cols(),
-            displayMat.rows(),
-            Bitmap.Config.ARGB_8888
-        )
-        Utils.matToBitmap(displayMat, outputBitmap)
-        _processedImage.value = outputBitmap
+            val bitmap = createBitmap(displayMat.cols(), displayMat.rows())
+            Utils.matToBitmap(displayMat, bitmap)
 
-        // Release temporary Mat
-        displayMat.release()
-    }
-
-    private fun showNonMaxSuppression() {
-        // Calculate derivatives in float format
-        Imgproc.Sobel(blurredMat, gradX, CvType.CV_32F, 1, 0)
-        Imgproc.Sobel(blurredMat, gradY, CvType.CV_32F, 0, 1)
-
-        // Calculate magnitude and direction
-        Core.magnitude(gradX, gradY, magnitudeMat)
-        val angleMat = Mat()
-        Core.phase(gradX, gradY, angleMat, true)
-
-        // Apply non-max suppression
-        val suppressed = nonMaxSuppression(magnitudeMat, angleMat)
-
-        // Convert to 4-channel BGRA for display
-        val displayMat = Mat()
-        Imgproc.cvtColor(suppressed, displayMat, Imgproc.COLOR_GRAY2BGRA)
-
-        // Convert to bitmap and update state
-        val outputBitmap = Bitmap.createBitmap(
-            displayMat.cols(),
-            displayMat.rows(),
-            Bitmap.Config.ARGB_8888
-        )
-        Utils.matToBitmap(displayMat, outputBitmap)
-        _processedImage.value = outputBitmap
-
-        // Release temporary Mats
-        angleMat.release()
-        displayMat.release()
-        suppressed.release()
-    }
-
-    private fun showDoubleThreshold() {
-        // Calculate edges using Canny
-        Imgproc.Canny(blurredMat, edgesMat, lowThreshold, highThreshold)
-
-        // Apply double threshold
-        val thresholded = applyDoubleThreshold(edgesMat)
-
-        // Convert to 4-channel BGRA for display
-        val displayMat = Mat()
-        Imgproc.cvtColor(thresholded, displayMat, Imgproc.COLOR_GRAY2BGRA)
-
-        // Convert to bitmap and update state
-        val outputBitmap = Bitmap.createBitmap(
-            displayMat.cols(),
-            displayMat.rows(),
-            Bitmap.Config.ARGB_8888
-        )
-        Utils.matToBitmap(displayMat, outputBitmap)
-        _processedImage.value = outputBitmap
-
-        // Release temporary Mats
-        displayMat.release()
-        thresholded.release()
-    }
-
-    private fun showFinalEdges() {
-        // Calculate final edges using Canny
-        Imgproc.Canny(blurredMat, edgesMat, lowThreshold, highThreshold)
-
-        // Apply hysteresis
-        val finalEdges = applyHysteresis(edgesMat)
-
-        // Convert to 4-channel BGRA for display
-        val displayMat = Mat()
-        Imgproc.cvtColor(finalEdges, displayMat, Imgproc.COLOR_GRAY2BGRA)
-
-        // Convert to bitmap and update state
-        val outputBitmap = Bitmap.createBitmap(
-            displayMat.cols(),
-            displayMat.rows(),
-            Bitmap.Config.ARGB_8888
-        )
-        Utils.matToBitmap(displayMat, outputBitmap)
-        _processedImage.value = outputBitmap
-
-        // Release temporary Mats
-        displayMat.release()
-        finalEdges.release()
-    }
-
-    private fun nonMaxSuppression(magnitude: Mat, angle: Mat): Mat {
-        val suppressed = Mat.zeros(magnitude.size(), CvType.CV_8U)
-        val rows = magnitude.rows()
-        val cols = magnitude.cols()
-
-        for (r in 1 until rows - 1) {
-            for (c in 1 until cols - 1) {
-                val dir = angle.get(r, c)[0]
-                val mag = magnitude.get(r, c)[0]
-
-                // Determine neighbors to compare based on gradient direction
-                val (r1, c1) = when {
-                    dir < 22.5 || dir >= 157.5 -> Pair(r, c - 1)    // 0° (horizontal)
-                    dir < 67.5 -> Pair(r - 1, c + 1)                 // 45°
-                    dir < 112.5 -> Pair(r - 1, c)                    // 90° (vertical)
-                    else -> Pair(r - 1, c - 1)                       // 135°
-                }
-
-                val (r2, c2) = when {
-                    dir < 22.5 || dir >= 157.5 -> Pair(r, c + 1)
-                    dir < 67.5 -> Pair(r + 1, c - 1)
-                    dir < 112.5 -> Pair(r + 1, c)
-                    else -> Pair(r + 1, c + 1)
-                }
-
-                // Suppress non-maximum pixels
-                if (mag >= magnitude.get(r1, c1)[0] &&
-                    mag >= magnitude.get(r2, c2)[0]) {
-                    // Convert float magnitude to byte (0-255) and store
-                    val byteValue = (mag * 255).toInt().coerceIn(0, 255).toByte()
-                    suppressed.put(r, c, byteArrayOf(byteValue))
-                }
+            withContext(Dispatchers.Main) {
+                _processedImage.value = bitmap
             }
+        } finally {
+            displayMat.release()
         }
-        return suppressed
-    }
-
-    private fun applyDoubleThreshold(edges: Mat): Mat {
-        val thresholded = Mat.zeros(edges.size(), CvType.CV_8U)
-        val rows = edges.rows()
-        val cols = edges.cols()
-
-        for (r in 0 until rows) {
-            for (c in 0 until cols) {
-                val value = edges.get(r, c)[0]
-                when {
-                    value > highThreshold -> thresholded.put(r, c, 255.0)  // Strong edge
-                    value > lowThreshold -> thresholded.put(r, c, 100.0)   // Weak edge
-                }
-            }
-        }
-        return thresholded
-    }
-
-    private fun applyHysteresis(edges: Mat): Mat {
-        val finalEdges = Mat.zeros(edges.size(), CvType.CV_8U)
-        val rows = edges.rows()
-        val cols = edges.cols()
-
-        for (r in 1 until rows - 1) {
-            for (c in 1 until cols - 1) {
-                if (edges.get(r, c)[0] > highThreshold) {
-                    // Strong edge - mark as final edge
-                    finalEdges.put(r, c, 255.0)
-
-                    // Trace connected weak edges
-                    traceAndMark(edges, finalEdges, r, c)
-                }
-            }
-        }
-        return finalEdges
     }
 
     private fun traceAndMark(edges: Mat, finalEdges: Mat, r: Int, c: Int) {
@@ -351,32 +189,46 @@ class CameraViewModel : ViewModel() {
     }
 
     private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
-        val yBuffer = image.planes[0].buffer
-        val uBuffer = image.planes[1].buffer
-        val vBuffer = image.planes[2].buffer
+        val planes = image.planes
+        val yBuffer = planes[0].buffer
+        val uBuffer = planes[1].buffer
+        val vBuffer = planes[2].buffer
 
         val ySize = yBuffer.remaining()
         val uSize = uBuffer.remaining()
         val vSize = vBuffer.remaining()
 
-        val nv21 = ByteArray(ySize + uSize + vSize)
+        // Proper NV21: Y + interleaved VU (V first then U for each 2x2 block)
+        val nv21 = ByteArray(ySize + image.width * image.height / 2)
 
-        // Y
+        // Copy Y plane
         yBuffer.get(nv21, 0, ySize)
 
-        // U
-        vBuffer.get(nv21, ySize, vSize)
+        // Interleave V and U planes
+        val vRowStride = planes[2].rowStride
+        val vPixelStride = planes[2].pixelStride
+        val uRowStride = planes[1].rowStride
+        val uPixelStride = planes[1].pixelStride
 
-        // V
-        uBuffer.get(nv21, ySize + vSize, uSize)
+        var offset = ySize
+        var vPos = 0
+        var uPos = 0
 
-        val yuvImage = YuvImage(
-            nv21, ImageFormat.NV21, image.width, image.height, null
-        )
+        // Process 2x2 chroma blocks
+        for (row in 0 until image.height / 2) {
+            for (col in 0 until image.width / 2) {
+                nv21[offset++] = vBuffer.get(vPos)
+                nv21[offset++] = uBuffer.get(uPos)
+                vPos += vPixelStride
+                uPos += uPixelStride
+            }
+            vPos += vRowStride - (image.width / 2 * vPixelStride)
+            uPos += uRowStride - (image.width / 2 * uPixelStride)
+        }
 
+        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
         val out = ByteArrayOutputStream()
         yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 100, out)
-        val imageBytes = out.toByteArray()
-        return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+        return BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size())
     }
 }
