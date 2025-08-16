@@ -51,8 +51,8 @@ git clone https://github.com/TianK003/CannyEdgeDetector-Android.git
 ```
 
 2. ### Add OpenCV for Android
-  2.1 Download [OpenCV for Android](https://opencv.org/releases/).  
-  2.2 Import the module in AndroidStudio: File → New → Import Module → Select OpenCV
+  - Download [OpenCV for Android](https://opencv.org/releases/).
+  -  Import the module in AndroidStudio: File → New → Import Module → Select OpenCV
   
 3. Add OpenCV dependency in your **app/build.gradle.kts**:
 ```gradle
