@@ -5,6 +5,7 @@ import mobile.cannyedge.ui.components.CameraSwitchButton
 import mobile.cannyedge.ui.viewmodels.CameraViewModel
 import android.Manifest
 import android.content.Context
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.view.LifecycleCameraController
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,10 +18,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -39,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import mobile.cannyedge.R
 import mobile.cannyedge.ui.components.ProcessingStepSlider
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -54,8 +60,8 @@ fun CameraScreen(
     val isCameraInitialized = remember { mutableStateOf(false) }
     val sliderPosition by viewModel.sliderPosition.collectAsState()
     val processedImage by viewModel.processedImage.collectAsState()
+    val isCaptured by viewModel.isCaptured.collectAsState()
 
-    // Initialize camera and set up analysis
     LaunchedEffect(Unit) {
         if (hasPermission.status.isGranted) {
             initializeCamera(
@@ -82,40 +88,19 @@ fun CameraScreen(
         }
     }
 
-    // Update processing step when slider changes
-    LaunchedEffect(sliderPosition) {
-        viewModel.setProcessingStep(sliderPosition.toInt())
-    }
-
     Box(modifier = modifier.fillMaxSize()) {
         if (isCameraInitialized.value) {
-            if (sliderPosition == 0f) {
-                // Show original camera preview
+            if (!isCaptured) {
                 CameraPreview(
                     controller = cameraController,
                     modifier = Modifier.fillMaxSize()
                 )
-            } else if (processedImage != null) {
-                // Show processed image
-                Image(
-                    bitmap = processedImage!!.asImageBitmap(),
-                    contentDescription = "Processed Image",
-                    contentScale = ContentScale.FillBounds,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
 
-            // Position the switch button above the slider in the center
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Camera switch button with white background
+                // Camera switch button (top right, only shown before capture)
                 Box(
-                    contentAlignment = Alignment.Center,
                     modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
                         .background(Color.White, CircleShape)
                         .size(48.dp)
                 ) {
@@ -124,20 +109,63 @@ fun CameraScreen(
                         modifier = Modifier.size(36.dp)
                     )
                 }
+            } else {
+                processedImage?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Captured Image",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Slider
-                ProcessingStepSlider(
-                    positions = 4,
-                    sliderPosition = sliderPosition,
-                    onPositionChanged = { viewModel.updateSliderPosition(it) },
+                // Back button (top left, only shown after capture)
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                )
+                        .align(Alignment.TopStart)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .background(Color.White, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    IconButton(
+                        onClick = { viewModel.resetCapture() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_back),
+                            contentDescription = "Back to camera"
+                        )
+                    }
+                }
+
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (!isCaptured) {
+                    Button(
+                        onClick = { viewModel.captureImage() },
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    ) {
+                        Text("Capture")
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    ProcessingStepSlider(
+                        positions = 4,
+                        sliderPosition = sliderPosition,
+                        onPositionChanged = { viewModel.updateSliderPosition(it) },
+                        modifier = Modifier.fillMaxWidth(0.8f)
+                    )
+                }
             }
         } else {
-            // Show loading indicator while initializing camera
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -149,19 +177,21 @@ fun CameraScreen(
 }
 
 private fun initializeCamera(
-    context: Context,  // Added context parameter
+    context: Context,
     cameraController: LifecycleCameraController,
     lifecycleOwner: LifecycleOwner,
     viewModel: CameraViewModel,
-    isCameraInitialized: MutableState<Boolean>
+    isCameraInitialized: androidx.compose.runtime.MutableState<Boolean>
 ) {
     cameraController.bindToLifecycle(lifecycleOwner)
+    // Keep only the latest frame so we "freeze" a recent frame at capture
+    cameraController.imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+
     viewModel.setCameraController(cameraController)
     isCameraInitialized.value = true
 
-    // Set up image analysis
     cameraController.setImageAnalysisAnalyzer(
-        ContextCompat.getMainExecutor(context),  // Now using the context parameter
+        ContextCompat.getMainExecutor(context),
         viewModel.createImageAnalyzer()
     )
 }
