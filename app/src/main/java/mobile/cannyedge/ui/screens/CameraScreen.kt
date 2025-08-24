@@ -1,14 +1,12 @@
 package mobile.cannyedge.ui.screens
 
 import mobile.cannyedge.ui.components.CameraPreview
-import mobile.cannyedge.ui.components.CameraSwitchButton
 import mobile.cannyedge.ui.viewmodels.CameraViewModel
 import android.Manifest
 import android.content.Context
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.view.LifecycleCameraController
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -16,13 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,11 +23,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -44,7 +34,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import mobile.cannyedge.R
+import mobile.cannyedge.ui.components.BackButton
+import mobile.cannyedge.ui.components.CameraSwitchButton
+import mobile.cannyedge.ui.components.CaptureButton
 import mobile.cannyedge.ui.components.ProcessingStepSlider
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -95,20 +87,6 @@ fun CameraScreen(
                     controller = cameraController,
                     modifier = Modifier.fillMaxSize()
                 )
-
-                // Camera switch button (top right, only shown before capture)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .background(Color.White, CircleShape)
-                        .size(48.dp)
-                ) {
-                    CameraSwitchButton(
-                        onSwitchCamera = { viewModel.switchCamera() },
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
             } else {
                 processedImage?.let { bitmap ->
                     Image(
@@ -119,26 +97,13 @@ fun CameraScreen(
                     )
                 }
 
-                // Back button (top left, only shown after capture)
-                Box(
+                // Back button (top left)
+                BackButton(
+                    onBack = { viewModel.resetCapture() },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(16.dp)
-                        .size(48.dp)
-                        .background(Color.White, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    IconButton(
-                        onClick = { viewModel.resetCapture() },
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_back),
-                            contentDescription = "Back to camera"
-                        )
-                    }
-                }
-
+                )
             }
 
             Column(
@@ -148,12 +113,14 @@ fun CameraScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (!isCaptured) {
-                    Button(
-                        onClick = { viewModel.captureImage() },
+                    CameraSwitchButton(
+                        onSwitchCamera = { viewModel.switchCamera() },
                         modifier = Modifier.padding(bottom = 16.dp)
-                    ) {
-                        Text("Capture")
-                    }
+                    )
+
+                    CaptureButton(
+                        onCapture = { viewModel.captureImage() }
+                    )
                 } else {
                     Spacer(modifier = Modifier.height(16.dp))
 
