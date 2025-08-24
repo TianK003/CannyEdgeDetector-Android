@@ -1,35 +1,30 @@
 package mobile.cannyedge.ui.screens
 
-import mobile.cannyedge.ui.components.CameraPreview
 import mobile.cannyedge.ui.viewmodels.CameraViewModel
 import android.Manifest
 import android.content.Context
+import android.graphics.Color as AColor
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.view.LifecycleCameraController
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -38,11 +33,14 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import mobile.cannyedge.ui.components.BackButton
+import mobile.cannyedge.ui.components.CameraPreview
 import mobile.cannyedge.ui.components.CameraSwitchButton
 import mobile.cannyedge.ui.components.CaptureButton
 import mobile.cannyedge.ui.components.ProcessingStepSlider
+import mobile.cannyedge.ui.components.SettingsButton
+import mobile.cannyedge.ui.components.SettingsContent
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CameraScreen(
     modifier: Modifier = Modifier,
@@ -53,10 +51,19 @@ fun CameraScreen(
     val cameraController = remember { LifecycleCameraController(context) }
     val hasPermission = rememberPermissionState(Manifest.permission.CAMERA)
     val isCameraInitialized = remember { mutableStateOf(false) }
+
     val sliderPosition by viewModel.sliderPosition.collectAsState()
     val processedImage by viewModel.processedImage.collectAsState()
     val isCaptured by viewModel.isCaptured.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+
+    // Settings state
+    val isSettingsOpen by viewModel.isSettingsOpen.collectAsState()
+    val kernelSize by viewModel.kernelSize.collectAsState()
+    val lowOverride by viewModel.lowThreshold.collectAsState()
+    val highOverride by viewModel.highThreshold.collectAsState()
+    val autoLow by viewModel.autoLow.collectAsState()
+    val autoHigh by viewModel.autoHigh.collectAsState()
 
     LaunchedEffect(Unit) {
         if (hasPermission.status.isGranted) {
@@ -99,20 +106,14 @@ fun CameraScreen(
                             .background(Color.Black.copy(alpha = 0.7f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Color.White)
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Processing image...",
-                                color = Color.White
-                            )
+                            Text(text = "Processing image...", color = Color.White)
                         }
                     }
                 }
 
-                // Show processed image when available
                 processedImage?.let { bitmap ->
                     Image(
                         bitmap = bitmap.asImageBitmap(),
@@ -127,6 +128,14 @@ fun CameraScreen(
                     onBack = { viewModel.resetCapture() },
                     modifier = Modifier
                         .align(Alignment.TopStart)
+                        .padding(16.dp)
+                )
+
+                // Settings icon (top right) visible after capture
+                SettingsButton(
+                    onClick = { viewModel.openSettings() },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
                         .padding(16.dp)
                 )
             }
@@ -148,11 +157,33 @@ fun CameraScreen(
                     )
                 } else {
                     Spacer(modifier = Modifier.height(16.dp))
-
                     ProcessingStepSlider(
                         sliderPosition = sliderPosition,
                         onPositionChanged = { viewModel.updateSliderPosition(it) },
                         modifier = Modifier.fillMaxWidth(0.8f)
+                    )
+                }
+            }
+
+            // Adaptive settings bottom sheet
+            if (isSettingsOpen) {
+                val currentStage = sliderPosition.toInt().coerceIn(0, 4)
+                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+                ModalBottomSheet(
+                    onDismissRequest = { viewModel.closeSettings() },
+                    sheetState = sheetState
+                ) {
+                    SettingsContent(
+                        currentStage = currentStage,
+                        kernelSize = kernelSize,
+                        onKernelChange = { viewModel.setKernelSize(it) },
+                        lowOverride = lowOverride,
+                        highOverride = highOverride,
+                        autoLow = autoLow,
+                        autoHigh = autoHigh,
+                        onThresholdsChange = { l, h -> viewModel.setThresholds(l, h) },
+                        onClose = { viewModel.closeSettings() }
                     )
                 }
             }
@@ -172,15 +203,12 @@ private fun initializeCamera(
     cameraController: LifecycleCameraController,
     lifecycleOwner: LifecycleOwner,
     viewModel: CameraViewModel,
-    isCameraInitialized: androidx.compose.runtime.MutableState<Boolean>
+    isCameraInitialized: MutableState<Boolean>
 ) {
     cameraController.bindToLifecycle(lifecycleOwner)
-    // Keep only the latest frame so we "freeze" a recent frame at capture
     cameraController.imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
-
     viewModel.setCameraController(cameraController)
     isCameraInitialized.value = true
-
     cameraController.setImageAnalysisAnalyzer(
         ContextCompat.getMainExecutor(context),
         viewModel.createImageAnalyzer()
