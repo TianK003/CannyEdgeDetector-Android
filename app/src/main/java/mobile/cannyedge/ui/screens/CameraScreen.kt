@@ -7,6 +7,7 @@ import android.content.Context
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.view.LifecycleCameraController
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -23,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -53,6 +56,7 @@ fun CameraScreen(
     val sliderPosition by viewModel.sliderPosition.collectAsState()
     val processedImage by viewModel.processedImage.collectAsState()
     val isCaptured by viewModel.isCaptured.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
     LaunchedEffect(Unit) {
         if (hasPermission.status.isGranted) {
@@ -88,6 +92,27 @@ fun CameraScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.7f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(color = Color.White)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Processing image...",
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                // Show processed image when available
                 processedImage?.let { bitmap ->
                     Image(
                         bitmap = bitmap.asImageBitmap(),
@@ -125,7 +150,6 @@ fun CameraScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     ProcessingStepSlider(
-                        positions = 4,
                         sliderPosition = sliderPosition,
                         onPositionChanged = { viewModel.updateSliderPosition(it) },
                         modifier = Modifier.fillMaxWidth(0.8f)

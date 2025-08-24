@@ -5,6 +5,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.LifecycleCameraController
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,9 @@ class CameraViewModel : ViewModel() {
     private val _isCaptured = MutableStateFlow(false)
     val isCaptured: StateFlow<Boolean> = _isCaptured.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+
     private var capturedBitmap: Bitmap? = null
 
     fun setCameraController(controller: LifecycleCameraController) {
@@ -34,14 +38,15 @@ class CameraViewModel : ViewModel() {
     }
 
     fun captureImage() {
-        // Simply show the last analyzed frame
         _isCaptured.value = true
+        _isLoading.value = true
         capturedBitmap?.let { _processedImage.value = it }
     }
 
     fun resetCapture() {
         _isCaptured.value = false
         _processedImage.value = null
+        _isLoading.value = false
         capturedBitmap = null
     }
 
