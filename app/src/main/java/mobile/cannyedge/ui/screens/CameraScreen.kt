@@ -3,28 +3,21 @@ package mobile.cannyedge.ui.screens
 import mobile.cannyedge.ui.viewmodels.CameraViewModel
 import android.Manifest
 import android.content.Context
-import android.graphics.Color as AColor
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.view.LifecycleCameraController
-import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -43,6 +36,7 @@ import mobile.cannyedge.ui.components.SettingsContent
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CameraScreen(
+    onBack: () -> Unit,  // Add this parameter for navigation
     modifier: Modifier = Modifier,
     viewModel: CameraViewModel = viewModel()
 ) {
@@ -92,6 +86,7 @@ fun CameraScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+        // Camera preview or captured image (background content)
         if (isCameraInitialized.value) {
             if (!isCaptured) {
                 CameraPreview(
@@ -122,70 +117,6 @@ fun CameraScreen(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-
-                // Back button (top left)
-                BackButton(
-                    onBack = { viewModel.resetCapture() },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                )
-
-                // Settings icon (top right) visible after capture
-                SettingsButton(
-                    onClick = { viewModel.openSettings() },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (!isCaptured) {
-                    CameraSwitchButton(
-                        onSwitchCamera = { viewModel.switchCamera() },
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    CaptureButton(
-                        onCapture = { viewModel.captureImage() }
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    ProcessingStepSlider(
-                        sliderPosition = sliderPosition,
-                        onPositionChanged = { viewModel.updateSliderPosition(it) },
-                        modifier = Modifier.fillMaxWidth(0.8f)
-                    )
-                }
-            }
-
-            // Adaptive settings bottom sheet
-            if (isSettingsOpen) {
-                val currentStage = sliderPosition.toInt().coerceIn(0, 4)
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-                ModalBottomSheet(
-                    onDismissRequest = { viewModel.closeSettings() },
-                    sheetState = sheetState
-                ) {
-                    SettingsContent(
-                        currentStage = currentStage,
-                        kernelSize = kernelSize,
-                        onKernelChange = { viewModel.setKernelSize(it) },
-                        lowOverride = lowOverride,
-                        highOverride = highOverride,
-                        autoLow = autoLow,
-                        autoHigh = autoHigh,
-                        onThresholdsChange = { l, h -> viewModel.setThresholds(l, h) },
-                        onClose = { viewModel.closeSettings() }
-                    )
-                }
             }
         } else {
             Box(
@@ -193,6 +124,81 @@ fun CameraScreen(
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
+            }
+        }
+
+        // UI controls (always on top)
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (!isCaptured && isCameraInitialized.value) {
+                CameraSwitchButton(
+                    onSwitchCamera = { viewModel.switchCamera() },
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                CaptureButton(
+                    onCapture = { viewModel.captureImage() }
+                )
+            } else if (isCaptured) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ProcessingStepSlider(
+                    sliderPosition = sliderPosition,
+                    onPositionChanged = { viewModel.updateSliderPosition(it) },
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                )
+            }
+        }
+
+        // Back button (always visible on top)
+        BackButton(
+            onBack = {
+                if (isCaptured) {
+                    viewModel.resetCapture()
+                } else {
+                    onBack()
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+                .zIndex(1f)
+        )
+
+        // Settings button (visible only after capture)
+        if (isCaptured) {
+            SettingsButton(
+                onClick = { viewModel.openSettings() },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .zIndex(1f) // Ensure it's above other elements
+            )
+        }
+
+        // Settings bottom sheet
+        if (isSettingsOpen) {
+            val currentStage = sliderPosition.toInt().coerceIn(0, 4)
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+            ModalBottomSheet(
+                onDismissRequest = { viewModel.closeSettings() },
+                sheetState = sheetState
+            ) {
+                SettingsContent(
+                    currentStage = currentStage,
+                    kernelSize = kernelSize,
+                    onKernelChange = { viewModel.setKernelSize(it) },
+                    lowOverride = lowOverride,
+                    highOverride = highOverride,
+                    autoLow = autoLow,
+                    autoHigh = autoHigh,
+                    onThresholdsChange = { l, h -> viewModel.setThresholds(l, h) },
+                    onClose = { viewModel.closeSettings() }
+                )
             }
         }
     }
