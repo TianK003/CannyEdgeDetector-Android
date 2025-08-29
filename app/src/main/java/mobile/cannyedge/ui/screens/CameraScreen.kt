@@ -29,13 +29,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import mobile.cannyedge.ui.components.BackButton
+
 import mobile.cannyedge.ui.components.CameraPreview
-import mobile.cannyedge.ui.components.CameraSwitchButton
 import mobile.cannyedge.ui.components.CaptureButton
 import mobile.cannyedge.ui.components.CircleIconButton
 import mobile.cannyedge.ui.components.ProcessingStepSlider
-import mobile.cannyedge.ui.components.SettingsButton
 import mobile.cannyedge.ui.components.SettingsContent
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -174,7 +172,7 @@ fun CameraScreen(
             contentDescription = "Back",
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(16.dp)
+                .padding(top = 32.dp, start = 16.dp)
                 .zIndex(1f)
         )
 
@@ -186,7 +184,7 @@ fun CameraScreen(
                 contentDescription = "Settings",
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp)
+                    .padding(top = 32.dp, end = 16.dp)
                     .zIndex(1f)
             )
         }

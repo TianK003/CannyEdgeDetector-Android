@@ -2,7 +2,6 @@ package mobile.cannyedge.ui.screens
 
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -45,19 +44,19 @@ fun HomeScreen(
     val sheetState = rememberModalBottomSheetState()
     var showInfoSheet by remember { mutableStateOf(false) }
 
-    // Main content
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Info button
         CircleIconButton(
             onClick = { showInfoSheet = true },
             icon = Icons.Default.Info,
             contentDescription = "Information",
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp)
+                .padding(top = 32.dp, end = 16.dp)
                 .zIndex(1f)
         )
 

@@ -132,7 +132,7 @@ fun LivePreviewScreen(
             contentDescription = "Back",
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(16.dp)
+                .padding(top = 32.dp, start = 16.dp)
                 .zIndex(1f)
         )
 
@@ -143,11 +143,10 @@ fun LivePreviewScreen(
             contentDescription = "Settings",
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp)
+                .padding(top = 32.dp, end = 16.dp)
                 .zIndex(1f)
         )
 
-        // 5) Bottom controls: switch above slider
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
