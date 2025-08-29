@@ -8,6 +8,10 @@ import androidx.camera.view.LifecycleCameraController
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +33,7 @@ import mobile.cannyedge.ui.components.BackButton
 import mobile.cannyedge.ui.components.CameraPreview
 import mobile.cannyedge.ui.components.CameraSwitchButton
 import mobile.cannyedge.ui.components.CaptureButton
+import mobile.cannyedge.ui.components.CircleIconButton
 import mobile.cannyedge.ui.components.ProcessingStepSlider
 import mobile.cannyedge.ui.components.SettingsButton
 import mobile.cannyedge.ui.components.SettingsContent
@@ -135,8 +140,11 @@ fun CameraScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (!isCaptured && isCameraInitialized.value) {
-                CameraSwitchButton(
-                    onSwitchCamera = { viewModel.switchCamera() },
+                // Camera switch facing side button
+                CircleIconButton(
+                    onClick = { viewModel.switchCamera() },
+                    icon = Icons.Filled.Cameraswitch,
+                    contentDescription = "Switch camera",
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
@@ -153,15 +161,17 @@ fun CameraScreen(
             }
         }
 
-        // Back button (always visible on top)
-        BackButton(
-            onBack = {
+        // Back button
+        CircleIconButton(
+            onClick = {
                 if (isCaptured) {
                     viewModel.resetCapture()
                 } else {
                     onBack()
                 }
             },
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(16.dp)
@@ -170,12 +180,14 @@ fun CameraScreen(
 
         // Settings button (visible only after capture)
         if (isCaptured) {
-            SettingsButton(
+            CircleIconButton(
                 onClick = { viewModel.openSettings() },
+                icon = Icons.Default.Settings,
+                contentDescription = "Settings",
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(16.dp)
-                    .zIndex(1f) // Ensure it's above other elements
+                    .zIndex(1f)
             )
         }
 

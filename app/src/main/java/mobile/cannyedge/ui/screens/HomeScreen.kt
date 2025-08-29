@@ -2,7 +2,7 @@ package mobile.cannyedge.ui.screens
 
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -17,8 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -35,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.core.net.toUri
-import mobile.cannyedge.ui.components.InfoButton
+import mobile.cannyedge.ui.components.CircleIconButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,8 +51,10 @@ fun HomeScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        InfoButton(
+        CircleIconButton(
             onClick = { showInfoSheet = true },
+            icon = Icons.Default.Info,
+            contentDescription = "Information",
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(16.dp)

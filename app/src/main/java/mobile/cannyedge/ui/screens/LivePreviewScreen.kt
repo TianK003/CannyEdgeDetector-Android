@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -34,11 +38,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import mobile.cannyedge.ui.components.BackButton
 import mobile.cannyedge.ui.components.CameraPreview
-import mobile.cannyedge.ui.components.CameraSwitchButton
+import mobile.cannyedge.ui.components.CircleIconButton
 import mobile.cannyedge.ui.components.ProcessingStepSlider
-import mobile.cannyedge.ui.components.SettingsButton
 import mobile.cannyedge.ui.components.SettingsContent
 import mobile.cannyedge.ui.viewmodels.LivePreviewViewModel
 
@@ -123,18 +125,22 @@ fun LivePreviewScreen(
             )
         }
 
-        // 3) Top-left Back
-        BackButton(
-            onBack = onBack,
+        // Back button
+        CircleIconButton(
+            onClick = onBack,
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(16.dp)
                 .zIndex(1f)
         )
 
-        // 4) Top-right Settings (always visible in live)
-        SettingsButton(
+        // Settings button
+        CircleIconButton(
             onClick = { viewModel.openSettings() },
+            icon = Icons.Default.Settings,
+            contentDescription = "Settings",
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(16.dp)
@@ -148,8 +154,11 @@ fun LivePreviewScreen(
                 .padding(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            CameraSwitchButton(
-                onSwitchCamera = { viewModel.switchCamera() },
+            // Camera switch button
+            CircleIconButton(
+                onClick = { viewModel.switchCamera() },
+                icon = Icons.Filled.Cameraswitch,
+                contentDescription = "Switch camera",
                 modifier = Modifier.padding(bottom = 16.dp)
             )
             ProcessingStepSlider(
@@ -159,7 +168,6 @@ fun LivePreviewScreen(
             )
         }
 
-        // 6) Settings bottom sheet
         if (isSettingsOpen) {
             val currentStage = sliderPosition.toInt().coerceIn(0, 4)
             val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
