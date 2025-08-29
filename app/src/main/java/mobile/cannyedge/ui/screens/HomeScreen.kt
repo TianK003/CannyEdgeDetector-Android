@@ -33,7 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.net.toUri
+import mobile.cannyedge.ui.components.InfoButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,15 +53,13 @@ fun HomeScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Info button (top right)
-        IconButton(
+        InfoButton(
             onClick = { showInfoSheet = true },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(16.dp)
-        ) {
-            Icon(Icons.Default.Info, contentDescription = "Information")
-        }
+                .zIndex(1f)
+        )
 
         Column(
             modifier = Modifier.align(Alignment.Center),
