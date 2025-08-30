@@ -6,12 +6,9 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.LifecycleCameraController
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 import org.opencv.core.Core
 import org.opencv.core.CvType
@@ -34,7 +31,7 @@ class LivePreviewViewModel : ViewModel() {
     private val _processedFrame = MutableStateFlow<Bitmap?>(null)
     val processedFrame: StateFlow<Bitmap?> = _processedFrame.asStateFlow()
 
-    // Settings state (same contract as CameraViewModel)
+    // Settings state
     private val _isSettingsOpen = MutableStateFlow(false)
     val isSettingsOpen: StateFlow<Boolean> = _isSettingsOpen.asStateFlow()
 
@@ -57,14 +54,18 @@ class LivePreviewViewModel : ViewModel() {
     private var matRgba = Mat()
     private var matGray = Mat()
     private var matBlur = Mat()
-    private var matGradX = Mat()
-    private var matGradY = Mat()
-    private var matMag = Mat()
-    private var matDir = Mat()
-    private var matMag8U = Mat()
-    private var matNms = Mat()
-    private var matThresh = Mat()
-    private var matEdges = Mat()
+    private var matGradX = Mat()   // CV_32F
+    private var matGradY = Mat()   // CV_32F
+    private var matMag = Mat()     // CV_32F
+    private var matDir = Mat()     // CV_32F (radians)
+    private var matMag8U = Mat()   // CV_8U (display)
+    private var matNms = Mat()     // CV_8U (display)
+    private var matThresh = Mat()  // CV_8U
+    private var matEdges = Mat()   // CV_8U (final)
+
+    // Orientation temp Mats
+    private var matRot = Mat()
+    private var matFlip = Mat()
 
     // FPS throttle (~30fps)
     private var lastProcessNs = 0L
@@ -72,9 +73,7 @@ class LivePreviewViewModel : ViewModel() {
 
     init { OpenCVLoader.initDebug() }
 
-    fun resetStage() {
-        _sliderPosition.value = 0f
-    }
+    fun resetStage() { _sliderPosition.value = 0f }
 
     fun setCameraController(controller: LifecycleCameraController) {
         cameraController = controller
@@ -89,10 +88,7 @@ class LivePreviewViewModel : ViewModel() {
 
     fun updateSliderPosition(position: Float) {
         _sliderPosition.value = position
-        // Clear the overlay immediately when returning to "Original"
-        if (position.roundToInt() == 0) {
-            _processedFrame.value = null
-        }
+        if (position.roundToInt() == 0) _processedFrame.value = null
     }
 
     fun openSettings() { _isSettingsOpen.value = true }
@@ -111,24 +107,115 @@ class LivePreviewViewModel : ViewModel() {
         _highThreshold.value = hh
     }
 
+    // --- Orientation helper: rotate to match PreviewView and mirror front camera ---
+    private fun orientedView(src: Mat, rotationDegrees: Int, lensFacing: Int): Mat {
+        var current = src
+        when ((rotationDegrees % 360 + 360) % 360) {
+            90  -> { Core.rotate(current, matRot, Core.ROTATE_90_CLOCKWISE); current = matRot }
+            180 -> { Core.rotate(current, matRot, Core.ROTATE_180); current = matRot }
+            270 -> { Core.rotate(current, matRot, Core.ROTATE_90_COUNTERCLOCKWISE); current = matRot }
+            else -> { /* 0° */ }
+        }
+        if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+            Core.flip(current, matFlip, +1) // horizontal mirror
+            current = matFlip
+        }
+        return current
+    }
+
+    /**
+     * Stage mapping:
+     * 0 = original (handled by caller with null bitmap)
+     * 1 = blurred grayscale
+     * 2 = gradient magnitude (8U normalized)
+     * 3 = NMS only (thinned magnitudes, NO threshold)
+     * 4 = double-threshold + hysteresis (final binary edges)
+     */
+    private fun processGrayMatForStage(
+        gray: Mat,
+        stage: Int,
+        rotationDegrees: Int,
+        lensFacing: Int
+    ): Bitmap? {
+        val k = _kernelSize.value.let { if (it % 2 == 0) it + 1 else it }.coerceAtLeast(3)
+
+        // 1) Blur
+        Imgproc.GaussianBlur(gray, matBlur, Size(k.toDouble(), k.toDouble()), 0.0, 0.0)
+        if (stage == 1) return matToBitmap(orientedView(matBlur, rotationDegrees, lensFacing))
+
+        // 2) Gradients (float) + magnitude
+        Imgproc.Sobel(matBlur, matGradX, CvType.CV_32F, 1, 0, 3)
+        Imgproc.Sobel(matBlur, matGradY, CvType.CV_32F, 0, 1, 3)
+        Core.magnitude(matGradX, matGradY, matMag)
+        val magMax = max(1.0, Core.minMaxLoc(matMag).maxVal)
+        matMag.convertTo(matMag8U, CvType.CV_8U, 255.0 / magMax)
+        if (stage == 2) return matToBitmap(orientedView(matMag8U, rotationDegrees, lensFacing))
+
+        // 3) NMS only
+        if (matDir.empty() || matDir.size() != matGradX.size()) {
+            matDir = Mat(matGradX.size(), CvType.CV_32F)
+        }
+        computeDirection(matGradX, matGradY, matDir)  // atan2(gy, gx), radians
+        matNms = nonMaximumSuppression(matMag, matDir) // returns CV_8U thinned magnitudes
+        if (stage == 3) return matToBitmap(orientedView(matNms, rotationDegrees, lensFacing))
+
+        // 4) Double threshold + hysteresis on NMS
+        val (autoL, autoH) = autoThresholds(matNms)
+        _autoLow.value = autoL
+        _autoHigh.value = autoH
+        val low = _lowThreshold.value ?: autoL
+        val high = _highThreshold.value ?: autoH
+
+        matThresh = doubleThreshold(matNms, low, high)
+        matEdges = hysteresis(matThresh)
+
+        return matToBitmap(orientedView(matEdges, rotationDegrees, lensFacing))
+    }
+
+    private val matY = Mat()
+    private val matNV21 = Mat()
+
+    private fun processImageProxy(
+        image: ImageProxy,
+        stage: Int,
+        rotationDegrees: Int,
+        lensFacing: Int
+    ): Bitmap? {
+        val w = image.width
+        val h = image.height
+
+        // Use Y plane directly as grayscale
+        val yPlane = image.planes[0]
+        if (matGray.empty() || matGray.rows() != h || matGray.cols() != w) {
+            matGray = Mat(h, w, CvType.CV_8UC1)
+        }
+        yPlane.buffer.run {
+            rewind()
+            val yBytes = ByteArray(remaining())
+            get(yBytes)
+            matGray.put(0, 0, yBytes)
+        }
+
+        return processGrayMatForStage(matGray, stage, rotationDegrees, lensFacing)
+    }
+
     fun createLiveAnalyzer(): ImageAnalysis.Analyzer {
         return ImageAnalysis.Analyzer { image ->
             val now = System.nanoTime()
             if (now - lastProcessNs < frameIntervalNs) { image.close(); return@Analyzer }
             lastProcessNs = now
 
+            val stage = _sliderPosition.value.roundToInt().coerceIn(0, 4)
+            if (stage == 0) { _processedFrame.value = null; image.close(); return@Analyzer }
+
             try {
-                val bmp = imageProxyToBitmap(image, lensFacing)
-                viewModelScope.launch(Dispatchers.Default) {
-                    val stage = _sliderPosition.value.roundToInt().coerceIn(0, 4)
-                    if (stage == 0) {
-                        // Original image: no overlay bitmap; let the CameraPreview show through
-                        _processedFrame.value = null
-                        return@launch
-                    }
-                    val out = processBitmapForStage(bmp, stage)
-                    _processedFrame.value = out
-                }
+                val out = processImageProxy(
+                    image = image,
+                    stage = stage,
+                    rotationDegrees = image.imageInfo.rotationDegrees,
+                    lensFacing = lensFacing
+                )
+                _processedFrame.value = out
             } finally {
                 image.close()
             }
@@ -141,50 +228,7 @@ class LivePreviewViewModel : ViewModel() {
             .build()
     }
 
-    // ---------------- Per-frame pipeline (partial compute by stage) ----------------
-
-    private fun processBitmapForStage(source: Bitmap, stage: Int): Bitmap {
-        // Convert to RGBA Mat
-        bitmapToRgbaMat(source, matRgba)
-
-        // Gray
-        Imgproc.cvtColor(matRgba, matGray, Imgproc.COLOR_RGBA2GRAY)
-
-        // Smoothing
-        val k = kernelSize.value.let { if (it % 2 == 0) it + 1 else it }.coerceAtLeast(3)
-        Imgproc.GaussianBlur(matGray, matBlur, Size(k.toDouble(), k.toDouble()), 0.0, 0.0)
-        if (stage == 1) return matToBitmap(matBlur)
-
-        // Gradients + magnitude (8U for display)
-        Imgproc.Sobel(matBlur, matGradX, CvType.CV_32F, 1, 0, 3)
-        Imgproc.Sobel(matBlur, matGradY, CvType.CV_32F, 0, 1, 3)
-        Core.magnitude(matGradX, matGradY, matMag)
-        val magMax = max(1.0, Core.minMaxLoc(matMag).maxVal)
-        matMag.convertTo(matMag8U, CvType.CV_8U, 255.0 / magMax)
-        if (stage == 2) return matToBitmap(matMag8U)
-
-        // Direction + NMS
-        if (matDir.empty() || matDir.size() != matGradX.size()) {
-            matDir = Mat(matGradX.size(), CvType.CV_32F)
-        }
-        computeDirection(matGradX, matGradY, matDir)
-        matNms = nonMaximumSuppression(matMag, matDir)
-        if (stage == 3) return matToBitmap(matNms)
-
-        // Auto thresholds (unless overridden)
-        val (aLow, aHigh) = autoThresholds(matNms)
-        _autoLow.value = aLow
-        _autoHigh.value = aHigh
-        val useLow = lowThreshold.value ?: aLow
-        val useHigh = highThreshold.value ?: aHigh
-
-        // Double threshold + hysteresis (final)
-        matThresh = doubleThreshold(matNms, useLow, useHigh)
-        matEdges = hysteresis(matThresh)
-        return matToBitmap(matEdges)
-    }
-
-    // ---------- Helpers (same logic as your CameraViewModel) ----------
+    // ---------- NMS / Threshold / Hysteresis helpers ----------
 
     private fun nonMaximumSuppression(mag: Mat, dir: Mat): Mat {
         val rows = mag.rows(); val cols = mag.cols()
@@ -328,8 +372,7 @@ class LivePreviewViewModel : ViewModel() {
         return bmp
     }
 
-    // -------- CameraX: ImageProxy → Bitmap (same approach as your CameraViewModel) --------
-
+    // -------- CameraX: ImageProxy → Bitmap (legacy slow path; unused here) --------
     private fun imageProxyToBitmap(image: ImageProxy, lensFacing: Int): Bitmap {
         val nv21 = yuv420888ToNv21(image)
         val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
